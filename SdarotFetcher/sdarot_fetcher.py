@@ -12,7 +12,8 @@ class BaseFetcher(object):
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                       "Chrome/72.0.3626.121 Safari/537.36",
-        "Content-Type": "application/x-www-form-urlencoded"
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Referer": "https://www.sdarot.services/watch"
     }
 
     USER_AGENT_HEADER = {
@@ -29,9 +30,9 @@ class BaseFetcher(object):
         return session.get(url)
 
     @staticmethod
-    async def _fetch_stream_to_file(url, output_path, headers=None):
+    async def _fetch_stream_to_file(url, output_path, data=None, headers=None, cookies=None):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=None) as response:
+            async with session.get(url, data=data, headers=headers, cookies=cookies, timeout=None) as response:
                 async with aiofiles.open(output_path, "wb") as f:
                     while True:
                         chunk = await response.content.read(1024 * 4)
@@ -50,6 +51,7 @@ class EpisodeFetcher(BaseFetcher):
 
     async def __create_new_pre_watch_token(self):
         form_data = {"preWatch": "true", "SID": self.sid, "season": self.season, "ep": self.episode}
+        print (form_data)
 
         async with aiohttp.ClientSession() as session:
             async with await self._fetch_post(session, self.__ajax_watch_page, headers=self.HEADERS,
@@ -60,9 +62,9 @@ class EpisodeFetcher(BaseFetcher):
         return response_text, response_cookies
 
     async def __get_episode_metadata(self, pre_watch_token, cookies):
-        form_data = {"watch": "true", "token": pre_watch_token, "serie": self.sid, "season": self.season,
-                     "episode": self.episode,
-                     "auth": "false", "type": "episode"}
+        form_data = {"watch": "false", "token": pre_watch_token, "serie": self.sid, "season": self.season,
+                     "episode": self.episode, "type": "episode"}
+        print (form_data)
 
         async with aiohttp.ClientSession() as session:
             async with await self._fetch_post(session, self.__ajax_watch_page, headers=self.HEADERS, data=form_data,
@@ -76,7 +78,10 @@ class EpisodeFetcher(BaseFetcher):
 
     def __format_episode_source_url(self, cdn_domain_name, watch_number, vid_number, video_token, video_time,
                                     video_uid):
-        return "https://{}/watch/episode/{}/{}.mp4?token={}&time={}&uid={}".format(cdn_domain_name, watch_number,
+        print("https://{}/w/episode/{}/{}.mp4?token={}&time={}&uid={}".format(cdn_domain_name, watch_number,
+                                                                                   vid_number,
+                                                                                   video_token, video_time, video_uid))
+        return "https://{}/w/episode/{}/{}.mp4?token={}&time={}&uid={}".format(cdn_domain_name, watch_number,
                                                                                    vid_number,
                                                                                    video_token, video_time, video_uid)
 
@@ -98,12 +103,12 @@ class EpisodeFetcher(BaseFetcher):
         await asyncio.sleep(31)
         episode_metadata = await self.__get_episode_metadata(pre_watch_token, cookies)
 
-        return self.__get_episode_source_url_from_metadata(episode_metadata)
+        return self.__get_episode_source_url_from_metadata(episode_metadata), episode_metadata, cookies
 
     async def download_episode(self, output_path):
-        episode_url = await self.get_episode_url()
+        episode_url, metadata, cookies = await self.get_episode_url()
 
-        await self._fetch_stream_to_file(episode_url, output_path, headers=self.USER_AGENT_HEADER)
+        await self._fetch_stream_to_file(episode_url, output_path, data={"time": metadata["time"], "token": metadata["watch"]["480"], "uid": metadata["uid"]}, headers=self.USER_AGENT_HEADER, cookies=cookies)
 
 
 class SeriesFetcher(BaseFetcher):
@@ -176,7 +181,7 @@ class SdarotBulkDownload(BaseFetcher):
         series_name = search_result[0]['name']
 
         tasks = []
-        sem = asyncio.Semaphore(2)
+        sem = asyncio.Semaphore(3)
 
         for i in range(1, episodes_number + 1):
             episode_fetcher = EpisodeFetcher(self.sdarot_root_url, series_id, season, i)

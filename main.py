@@ -1,5 +1,5 @@
 import json
-from SdarotFetcher.sdarot_fetcher import SdarotBulkDownload, EpisodeFetcher, SeriesFetcher
+from SdarotFetcher.sdarot_fetcher import SdarotBulkDownload, EpisodeFetcher, SeriesFetcher, BaseFetcher
 
 if __name__ == '__main__':
     with open(r"./config.json", encoding="utf-8") as json_file:
